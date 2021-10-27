@@ -1,3 +1,5 @@
+mod schemes;
+
 fn main() {
-	println!("Hello world");
+	schemes::mklhs::test();
 }
