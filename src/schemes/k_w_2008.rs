@@ -1,8 +1,11 @@
+use core::time::Duration;
 use curv::arithmetic::Converter;
 use curv::elliptic::curves::Bls12_381_2;
 use curv::elliptic::curves::{bls12_381, Bls12_381_1, ECPoint, Generator, Point, Scalar};
 use curv::BigInt;
 use rand::Rng;
+use std::mem::size_of;
+use std::time::Instant;
 
 pub type P1 = Point<Bls12_381_1>;
 pub type P2 = Point<Bls12_381_2>;
@@ -11,6 +14,7 @@ pub type S2 = Scalar<Bls12_381_2>;
 type SK = BigInt;
 type PK = P2;
 type Sig = P1;
+type V = Vec<u32>;
 
 pub struct Key {
 	pk: PK,
@@ -115,4 +119,98 @@ pub fn test() {
 		"Signature for combined message {:?} verifies: {:?}",
 		&m_comb, v_comb
 	);
+}
+
+const BENCH_ITERATIONS: usize = 100;
+
+pub fn bench() {
+	println!();
+	println!("[BenchMark] Scheme: KW2008");
+	println!("[BenchMark] Byte size sig:\t{}", size_of::<Sig>());
+	println!("[BenchMark] Byte size pk:\t{}", size_of::<PK>());
+	println!("[BenchMark] Byte size sk:\t{}", size_of::<SK>());
+	println!();
+	println!("[BenchMark] Averaging over num runs: {}", &BENCH_ITERATIONS);
+	let scheme = bench_setup();
+	let key = bench_key_gen(&scheme);
+	let m: V = vec![1, 2, 3, 4, 5, 6, 7, 8];
+	let m2: V = vec![8, 7, 6, 5, 4, 3, 2, 1];
+	let sig = bench_sign(&scheme, &key, &m);
+	bench_verify(&scheme, &key, &m, &sig, "original signature");
+	let s2 = scheme.sign(&key.sk, &123, &m2);
+	let weights: V = vec![1, 2, 3, 4, 5, 6, 7, 8];
+	let (s_c, m_c) = bench_combine(&scheme, &weights, &vec![m, m2], &vec![sig, s2]);
+	bench_verify(&scheme, &key, &m_c, & s_c, "combined signature");
+}
+
+fn bench_setup() -> KW2008 {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		KW2008::setup();
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Setup:\t {:?}", avg_duration);
+	KW2008::setup()
+}
+
+fn bench_key_gen(s: &KW2008) -> Key {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	let mut rng = rand::thread_rng();
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.key_gen(&mut rng);
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+
+	println!("[BenchMark] KeyGen:\t {:?}", avg_duration);
+	s.key_gen(&mut rng)
+}
+
+fn bench_sign(s: &KW2008, k: &Key, m: &V) -> Sig {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.sign(&k.sk, &123, m);
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Sign:\t {:?}", avg_duration);
+	s.sign(&k.sk, &123, m)
+}
+
+fn bench_verify(s: &KW2008, k: &Key, m: &V, sig: &Sig, comment: &str) -> bool {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.verify(&k.pk, &123, m, sig);
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Verify ({})\t {:?}", comment, avg_duration);
+	s.verify(&k.pk, &123, m, sig)
+}
+
+fn bench_combine(s: &KW2008, weights: &V, messages: &Vec<V>, signatures: &Vec<Sig>) -> (Sig, V) {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.combine(&123, weights, messages, signatures);
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Combine:\t {:?}", avg_duration);
+	s.combine(&123, weights, messages, signatures)
 }

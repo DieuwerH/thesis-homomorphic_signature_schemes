@@ -1,14 +1,22 @@
 use bls12_381::Pair;
+use core::time::Duration;
 use curv::arithmetic::*;
 use curv::elliptic::curves::{
     bls12_381, Bls12_381_1, Bls12_381_2, ECPoint, Generator, Point, Scalar,
 };
 use rand::Rng;
+use std::mem::size_of;
+use std::time::Instant;
 
 pub type S1 = Scalar<Bls12_381_1>;
 pub type S2 = Scalar<Bls12_381_2>;
 pub type P1 = Point<Bls12_381_1>;
 pub type P2 = Point<Bls12_381_2>;
+
+type PK = P2;
+type SK = BigInt;
+type ID = u32;
+type V = u32;
 
 pub struct Key {
     pub sk: BigInt,
@@ -35,12 +43,12 @@ pub struct Sig {
 }
 
 // #[derive(Debug)]
-pub struct MkTwo {
+pub struct MKLHS {
     g1: Generator<Bls12_381_1>,
     g2: Generator<Bls12_381_2>,
 }
 
-impl MkTwo {
+impl MKLHS {
     fn bi_to_s1(bi: &BigInt) -> S1 {
         return S1::from_bigint(bi);
     }
@@ -54,11 +62,11 @@ impl MkTwo {
     }
 
     fn u32_to_s1(u: &u32) -> S1 {
-        MkTwo::bi_to_s1(&MkTwo::u32_to_bi(u))
+        MKLHS::bi_to_s1(&MKLHS::u32_to_bi(u))
     }
 
     fn u32_to_s2(u: &u32) -> S2 {
-        MkTwo::bi_to_s2(&MkTwo::u32_to_bi(u))
+        MKLHS::bi_to_s2(&MKLHS::u32_to_bi(u))
     }
 
     pub fn setup() -> Self {
@@ -71,7 +79,7 @@ impl MkTwo {
     pub fn key_gen(&self, rng: &mut rand::prelude::ThreadRng) -> Key {
         let id: u32 = rng.gen();
         let sk = BigInt::from_bytes(&[1, 2, 3]);
-        let pk = self.g2 * MkTwo::bi_to_s2(&sk);
+        let pk = self.g2 * MKLHS::bi_to_s2(&sk);
 
         Key { sk, pk, id }
     }
@@ -88,10 +96,10 @@ impl MkTwo {
     }
 
     pub fn sign(&self, sk: &BigInt, l: &Label, m: &u32) -> Sig {
-        let loc = MkTwo::hash_label_to_curve(l);
-        let mut gam1 = self.g1 * MkTwo::u32_to_s1(m);
+        let loc = MKLHS::hash_label_to_curve(l);
+        let mut gam1 = self.g1 * MKLHS::u32_to_s1(m);
         gam1 = loc + gam1;
-        gam1 = gam1 * MkTwo::bi_to_s1(sk);
+        gam1 = gam1 * MKLHS::bi_to_s1(sk);
         Sig {
             ids: vec![l.id],
             gam: gam1,
@@ -107,8 +115,8 @@ impl MkTwo {
         pks: &Vec<P2>,
         i: usize,
     ) -> Pair {
-        let mut p1 = self.g1 * MkTwo::u32_to_s1(&mus[i]);
-        let loc = MkTwo::hash_label_to_curve(&labels[i]) * MkTwo::u32_to_s1(&coefficients[i]);
+        let mut p1 = self.g1 * MKLHS::u32_to_s1(&mus[i]);
+        let loc = MKLHS::hash_label_to_curve(&labels[i]) * MKLHS::u32_to_s1(&coefficients[i]);
         p1 = p1 + loc;
         Pair::compute_pairing(&p1, &pks[i])
     }
@@ -136,11 +144,11 @@ impl MkTwo {
     }
 
     fn eval(&self, coefficients: &Vec<u32>, signatures: &Vec<Sig>) -> Sig {
-        let mut gam = signatures[0].gam.clone() * MkTwo::u32_to_s1(&coefficients[0]);
+        let mut gam = signatures[0].gam.clone() * MKLHS::u32_to_s1(&coefficients[0]);
         let mut mus: Vec<u32> = signatures.iter().flat_map(|s| s.mus.clone()).collect();
         mus[0] = mus[0] * coefficients[0];
         for i in 1..signatures.len() {
-            gam = gam + signatures[i].gam.clone() * MkTwo::u32_to_s1(&coefficients[i]);
+            gam = gam + signatures[i].gam.clone() * MKLHS::u32_to_s1(&coefficients[i]);
             mus[i] = mus[i] * coefficients[i];
         }
 
@@ -152,7 +160,7 @@ impl MkTwo {
 
 pub fn test() {
     let mut rng = rand::thread_rng();
-    let scheme = MkTwo::setup();
+    let scheme = MKLHS::setup();
 
     let k1 = scheme.key_gen(&mut rng);
 
@@ -210,4 +218,138 @@ pub fn test() {
     let s_comb = scheme.eval(&p_comb.coefficients, &vec![s1, s2]);
     let v_comb = scheme.verify(&p_comb, &vec![k1.pk, k2.pk], &(m_comb), &s_comb);
     println!("s_comb verifies? {}", v_comb);
+}
+
+const BENCH_ITERATIONS: usize = 100;
+
+pub fn bench() {
+    println!();
+    println!("[BenchMark] Scheme: MKLHS");
+    println!("[BenchMark] Byte size sig:\t{}", size_of::<Sig>());
+    println!("[BenchMark] Byte size pk:\t{}", size_of::<PK>());
+    println!("[BenchMark] Byte size sk:\t{}", size_of::<SK>());
+    println!();
+    println!("[BenchMark] Averaging over num runs: {}", &BENCH_ITERATIONS);
+    let scheme = bench_setup();
+    let key = bench_key_gen(&scheme);
+    let label1 = Label {
+        id: key.id,
+        tag: 001,
+    };
+
+    let p1 = Program {
+        coefficients: vec![1],
+        labels: vec![label1.clone()],
+    };
+
+
+
+    let m: u32 = 123;
+    let sig = bench_sign(&scheme, &key, &m, &label1);
+    bench_verify(
+        &scheme,
+        &vec![key.pk.clone()],
+        &m,
+        &sig,
+        &p1,
+        "original signature",
+    );
+    let key2 = scheme.key_gen(&mut rand::thread_rng());
+    let label2 = Label {
+        id: key2.id,
+        tag: 001,
+    };
+    let m2: u32 = 456;
+    let s2 = scheme.sign(&key2.sk, &label2, &m2);
+    let p_comb = Program {
+        coefficients: vec![2, 3],
+        labels: vec![label1.clone(), label2.clone()],
+    };
+    let s_c = bench_combine(&scheme, &p_comb.coefficients, &vec![sig, s2]);
+    let m_comb = vec![m, m2]
+        .iter()
+        .zip(&p_comb.coefficients)
+        .map(|(m, c)| m * c)
+        .sum();
+
+    bench_verify(
+        &scheme,
+        &vec![key.pk.clone(), key2.pk.clone()],
+        &m_comb,
+        &s_c,
+        &p_comb,
+        "combined signature",
+    );
+}
+
+fn bench_setup() -> MKLHS {
+    let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+    for i in 0..BENCH_ITERATIONS {
+        let start = Instant::now();
+        MKLHS::setup();
+        let duration = start.elapsed();
+        results[i] = duration;
+    }
+    let total_duration: Duration = results.iter().sum();
+    let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+    println!("[BenchMark] Setup:\t {:?}", avg_duration);
+    MKLHS::setup()
+}
+
+fn bench_key_gen(s: &MKLHS) -> Key {
+    let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+    let mut rng = rand::thread_rng();
+    for i in 0..BENCH_ITERATIONS {
+        let start = Instant::now();
+        s.key_gen(&mut rng);
+        let duration = start.elapsed();
+        results[i] = duration;
+    }
+    let total_duration: Duration = results.iter().sum();
+    let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+
+    println!("[BenchMark] KeyGen:\t {:?}", avg_duration);
+    s.key_gen(&mut rng)
+}
+
+fn bench_sign(s: &MKLHS, k: &Key, m: &V, l: &Label) -> Sig {
+    let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+    for i in 0..BENCH_ITERATIONS {
+        let start = Instant::now();
+        s.sign(&k.sk, l, m);
+        let duration = start.elapsed();
+        results[i] = duration;
+    }
+    let total_duration: Duration = results.iter().sum();
+    let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+    println!("[BenchMark] Sign:\t {:?}", avg_duration);
+    s.sign(&k.sk, l, m)
+}
+
+fn bench_verify(s: &MKLHS, k: &Vec<PK>, m: &V, sig: &Sig, p: &Program, comment: &str) -> bool {
+    let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+    for i in 0..BENCH_ITERATIONS {
+        let start = Instant::now();
+        s.verify(p, k, m, sig);
+        let duration = start.elapsed();
+        results[i] = duration;
+    }
+    let total_duration: Duration = results.iter().sum();
+    let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+    println!("[BenchMark] Verify ({})\t {:?}", comment, avg_duration);
+    s.verify(p, k, m, sig)
+}
+
+fn bench_combine(s: &MKLHS, weights: &Vec<V>, signatures: &Vec<Sig>) -> Sig {
+    let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+    for i in 0..BENCH_ITERATIONS {
+        let start = Instant::now();
+        s.eval(weights, signatures);
+        let duration = start.elapsed();
+        results[i] = duration;
+    }
+    let total_duration: Duration = results.iter().sum();
+    let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+    println!("[BenchMark] Combine:\t {:?}", avg_duration);
+    s.eval(weights, signatures)
 }
