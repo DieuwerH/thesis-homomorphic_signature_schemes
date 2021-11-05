@@ -1,16 +1,28 @@
 mod schemes;
 mod util;
 
+const BENCH: bool = false;
+const TEST: bool = false;
+const SINGLE: bool = true;
+
 fn main() {
-	// schemes::mklhs::test();
+	if TEST {
+		schemes::mklhs::test();
+		schemes::k_w_2008::test();
+		schemes::boneh2009::test();
+	}
 
-	// schemes::k_w_2008::test();
+	if BENCH {
+		schemes::boneh2009::bench();
 
-	// schemes::boneh2009::test();
+		schemes::k_w_2008::bench();
 
-	// schemes::boneh2009::bench();
+		schemes::mklhs::bench();
+	}
 
-	// schemes::k_w_2008::bench();
-
-	schemes::mklhs::bench();
+	if SINGLE {
+		// schemes::schab2019::test_run();
+		// schemes::schab2019::inverTest();
+		schemes::schab2019::step_wise();
+	}
 }
