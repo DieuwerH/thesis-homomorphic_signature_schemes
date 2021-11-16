@@ -1,13 +1,16 @@
+#![allow(non_snake_case)]
+#![allow(unused_variables)]
+
+
 use crate::util::bls_util::*;
 use bls12_381::Pair;
 use curv::arithmetic::Converter;
 use curv::elliptic::curves::bls12_381;
 use curv::BigInt;
-use ed25519_dalek::{Keypair, Signature, Signer, Verifier};
+use ed25519_dalek::{Keypair,  Signer, Verifier};
 use hmac::{Hmac, Mac, NewMac};
-use rand::rngs::OsRng;
 use rand::rngs::ThreadRng;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{ Rng };
 use rand_old;
 use sha2::Sha256;
 
@@ -93,7 +96,7 @@ impl Schab2019 {
 
 		let mut xs = Vec::<S1>::new();
 		let mut hs = Vec::<bls12_381::Pair>::new();
-		for i in 0..self.n {
+		for _ in 0..self.n {
 			let x = S1::random();
 			xs.push(x.clone());
 			hs.push(bls12_381::Pair::compute_pairing(&(self.g1 * &x), &self.g2))
