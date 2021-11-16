@@ -50,10 +50,14 @@ pub fn u32_to_s2(u: &u32) -> S2 {
 }
 
 // Hashes a byte array to a point in G1
-fn hash_to_curve(msg: &[u8]) -> P1 {
+fn hash_bytes_to_curve(msg: &[u8]) -> P1 {
 	let on_curve = bls12_381::g1::G1Point::hash_to_curve(msg);
 	P1::from_coords(&on_curve.x_coord().unwrap(), &on_curve.y_coord().unwrap())
 		.expect("Coord not unwrapable")
+}
+
+pub fn hash_to_curve(msg: u32) -> P1 {
+	hash_bytes_to_curve(&msg.to_be_bytes())
 }
 
 // Iteratively hashes the id concattenated by the vector index
@@ -66,7 +70,7 @@ pub fn prod_hash_ids(id: &u32, vector: &Vec<u32>) -> P1 {
 	for (i, v_i) in vector.iter().enumerate() {
 		let mut to_hash = id_bytes.to_vec();
 		to_hash.append(&mut i.to_be_bytes().to_vec());
-		let s_i = hash_to_curve(&to_hash) * u32_to_s1(&v_i);
+		let s_i = hash_bytes_to_curve(&to_hash) * u32_to_s1(&v_i);
 		res = res + s_i;
 	}
 
