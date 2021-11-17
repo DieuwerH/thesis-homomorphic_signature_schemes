@@ -11,7 +11,7 @@ use ed25519_dalek::{Keypair,  Signer, Verifier};
 use hmac::{Hmac, Mac, NewMac};
 use rand::rngs::ThreadRng;
 use rand::{ Rng };
-use rand_old;
+use ed_rand;
 use sha2::Sha256;
 
 type HMS256 = Hmac<Sha256>;
@@ -91,7 +91,7 @@ impl Schab2019 {
 	fn key_gen(&self, rng: &mut ThreadRng) -> Key {
 		let k: u32 = rng.gen();
 
-		let mut csprng = rand_old::rngs::OsRng {};
+		let mut csprng = ed_rand::rngs::OsRng {};
 		let kp = Keypair::generate(&mut csprng);
 
 		let mut xs = Vec::<S1>::new();
@@ -305,7 +305,7 @@ pub fn step_wise() {
 	// KeyGen
 	let mut rng = rand::thread_rng();
 	let k = rng.gen::<[u8; 32]>();
-	let mut csprng = rand_old::rngs::OsRng {};
+	let mut csprng = ed_rand::rngs::OsRng {};
 	let sig_kp = Keypair::generate(&mut csprng);
 	let mut xs: Vec<S1> = Vec::new();
 	let mut hs: Vec<Pair> = Vec::new();
@@ -353,7 +353,7 @@ pub fn step_wise() {
 	let program = [1];
 	let sig_d_check = match sig_kp.verify(&d_msg, &sig_d) {
 		Ok(()) => true,
-		_ => true,
+		_ => false,
 	};
 	println!("Signature on dataset checks out? {}", sig_d_check);
 

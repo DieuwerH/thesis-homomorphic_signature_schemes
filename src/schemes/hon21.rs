@@ -1,7 +1,10 @@
+use core::mem::size_of;
 use crate::util::bls_util::*;
 use bls12_381::Pair;
 use curv::elliptic::curves::bls12_381;
 use curv::BigInt;
+use std::time::{Duration, Instant};
+use rand::{distributions::Uniform, Rng}; 
 
 const DBG: bool = false;
 
@@ -253,3 +256,102 @@ pub fn test() {
 	let v_cc = scheme.verify_identity_hiding(&sig_c_c, &((msg1 + msg2) + (msg1 + msg2 + msg3)), &vk_cc);
 	println!("VCC {}", v_cc);
 }
+
+const BENCH_ITERATIONS: usize = 100;
+
+pub fn bench() {
+	println!("[BenchMark] Scheme: Hon2021");
+	println!("[BenchMark] Byte size sig:\t{}", size_of::<Sig>());
+	println!("[BenchMark] Byte size pk:\t{}", size_of::<PK>());
+	println!("[BenchMark] Byte size sk:\t{}", size_of::<SK>());
+	println!();
+	println!(
+		"[BenchMark] Averaging over num runs: {}",
+		&BENCH_ITERATIONS
+	);
+	bench_setup();
+	bench_key_gen();
+	bench_sign();
+	bench_verify();
+}
+
+fn bench_setup() {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		Hon21::setup();
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Setup:\t {:?}", avg_duration);
+}
+
+fn bench_key_gen() {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	let s = Hon21::setup();
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.key_gen();
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+
+	println!("[BenchMark] KeyGen:\t {:?}", avg_duration);
+}
+
+fn bench_sign() {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	let s = Hon21::setup();
+	let k = s.key_gen();
+	let l = Label { id: 123, tg: 456 };
+    let range = Uniform::from(0..u32::MAX);
+    let msgs: Vec<MSG> = rand::thread_rng().sample_iter(&range).take(BENCH_ITERATIONS).collect();
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.sign(&msgs[i], &k.sk, &l);
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Sign:\t {:?}", avg_duration);
+}
+
+fn bench_verify() {
+	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+	let s = Hon21::setup();
+	let k = s.key_gen();
+	let l = Label { id: 123, tg: 456 };
+    let range = Uniform::from(0..u32::MAX);
+    let msgs: Vec<MSG> = rand::thread_rng().sample_iter(&range).take(BENCH_ITERATIONS).collect();
+	let sigs: Vec<Sig> = msgs.iter().map(|msg| s.sign(&msg, &k.sk,&l)).collect();
+	let pks = vec![&k.pk];
+	let ls = vec![&l];
+	for i in 0..BENCH_ITERATIONS {
+		let start = Instant::now();
+		s.verify(&sigs[i], &msgs[i], &pks,&ls);
+		let duration = start.elapsed();
+		results[i] = duration;
+	}
+	let total_duration: Duration = results.iter().sum();
+	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+	println!("[BenchMark] Verify\t {:?}", avg_duration);
+}
+
+// fn bench_combine(weights: &V, signatures: &Vec<Sig>) -> Sig {
+// 	let mut results: [Duration; BENCH_ITERATIONS] = [Duration::ZERO; BENCH_ITERATIONS];
+// 	for i in 0..BENCH_ITERATIONS {
+// 		let start = Instant::now();
+// 		B2009::combine(weights, signatures);
+// 		let duration = start.elapsed();
+// 		results[i] = duration;
+// 	}
+// 	let total_duration: Duration = results.iter().sum();
+// 	let avg_duration = total_duration / BENCH_ITERATIONS as u32;
+// 	println!("[BenchMark] Combine:\t {:?}", avg_duration);
+// 	B2009::combine(weights, signatures)
+// }

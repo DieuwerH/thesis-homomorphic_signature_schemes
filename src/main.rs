@@ -28,6 +28,9 @@ fn main() {
 		// schemes::schab2019::inverTest();
 		// schemes::schab2019::step_wise();
 		// tmp::test();
-		schemes::hon21::test();
+		// schemes::hon21::test();
+		// schemes::hon21::bench();
+		// schemes::schab2019_bn::test();
+		schemes::schab2019_bn::test_struct();
 	}
 }
