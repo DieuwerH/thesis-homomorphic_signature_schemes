@@ -4,3 +4,4 @@ pub mod boneh2009;
 pub mod schab2019;
 pub mod schab2019_bn;
 pub mod hon21;
+pub mod gennaro2010;
